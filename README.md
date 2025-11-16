@@ -1,13 +1,3 @@
-### Directory Structure
-- `host-flake/`
-  - `flake.nix` (host configuration)
-  - `modules/ArchibaldVM/`
-    - `flake.nix` (VM configuration)
-    - `modules/`
-      - `audio.nix`
-      - `users.nix`
----
-
 # ArchibaldOS VM for Real-Time Audio Development with Host-Based Gaming
 
 The ArchibaldOS VM is a headless, development-focused virtual machine designed to provide real-time (RT) audio processing for games running on the host NixOS system. Optimized for low-latency audio (~0.67ms latency, <0.1% xrun risk), it uses a PREEMPT_RT kernel with Musnix for RT optimizations and includes a minimal audio stack (PipeWire, Jack2, SuperCollider) alongside programming tools (GCC, Python, Git, CMake, Emacs, Nvim). The VM leverages IOMMU passthrough for near-native performance and supports networking with the host for PipeWire/JACK, StreamDB, and custom applications.
@@ -49,6 +39,24 @@ The ArchibaldOS VM supports games running on the host by providing a dedicated R
 - **Isolation**: The VM sandboxes experimental audio code or DSP passthrough, protecting the host’s gaming environment from crashes.
 - **Audio-Game Integration**: Open networking ports (e.g., 4713 for PipeWire/JACK) enable seamless host-VM audio routing, solving integration challenges for dynamic game audio.
 
+## Steam Machine Integration
+The ArchibaldOS VM is an ideal companion for Valve's new Steam Machine (announced November 12, 2025, launching early 2026), a semi-custom AMD-powered console (Zen 4 6C/12T CPU, RDNA3 28CU GPU, targeting 4K 60 FPS with FSR) running SteamOS (Arch Linux-based, kernel ~6.11). SteamOS uses a standard, non-RT kernel optimized for gaming throughput, making the VM perfect for offloading RT audio without compromising host stability or Proton compatibility.
+
+### Why It Fits Steam Machine
+- **Preserves SteamOS Performance**: Host flake deploys a standard kernel like SteamOS, ensuring seamless Proton (for Windows titles) and Vulkan RT (e.g., Quake II RTX). VM handles RT audio via dedicated cores (e.g., isolcpus=2-3 on Zen 4).
+- **RT Audio for Advanced FX**: Compute ray-traced reverb or generative soundscapes in the VM (~10-50µs latency via Musnix), routed to SteamOS audio output. Syncs with 4K visuals and FSR upscaling.
+- **Hardware Synergy**: IOMMU passthrough dedicates USB audio/DSPs to VM; Steam Machine's Ethernet/USB-C supports low-overhead networking (br0: 192.168.122.x).
+- **Easy Deployment**: Boot SteamOS Desktop Mode (KDE Plasma 6.2+), enable flakes (`experimental-features = nix-command flakes` in `/etc/nix/nix.conf`), then apply host flake.
+
+### Quick Setup on Steam Machine
+1. **Enable Flakes**: Edit `/etc/nix/nix.conf` and reboot.
+2. **Apply Host**: `sudo nixos-rebuild switch --flake .#host` (customizes SteamOS-like setup).
+3. **Build/Run VM**: `nix build .#packages.x86_64-linux.archibaldos-vm-image && ./result/bin/run-nixos-vm`.
+4. **Route Audio**: Host (SteamOS): `pw-cli` → Connect game output to VM JACK (192.168.122.2:4713). VM: `chrt -f 95 sclang` for FX → PipeWire back to host.
+5. **Test**: Launch Quake II RTX on host; VM generates ray-traced echoes—no xruns, cyclictest ~10µs.
+
+**Caveats**: Pricing unannounced (~$500-700 estimated); test IOMMU groups on AMD APU. ARM64 unsupported (Steam Frame VR is ARM, but Machine is x86).
+
 ## Prerequisites
 ### Hardware
 - **CPU**: x86_64 with IOMMU support (Intel VT-d or AMD-Vi). Verify: `dmesg | grep -E "DMAR|IOMMU"`.
@@ -57,7 +65,7 @@ The ArchibaldOS VM supports games running on the host by providing a dedicated R
 - **Storage**: 10GB SSD free space.
 - **GPU**: NVIDIA/AMD for host gaming (e.g., Vulkan RT). Optional: Passthrough to VM for audio DSPs.
 - **BIOS**: Enable VT-d (Intel) or AMD-Vi (AMD).
-- **Caveat**: ARM64 is not supported due to limited IOMMU availability (e.g., on Raspberry Pi 5). For ARM64, consider a native RT kernel setup.
+- **Caveat**: ARM64 is not supported due to limited IOMMU availability (e.g., Raspberry Pi 5). For ARM64, consider a native RT kernel setup.
 
 ### Software
 - **OS**: NixOS 24.05 or later with `nix` and flake support.
@@ -217,12 +225,3 @@ Submit issues or pull requests to enhance functionality. Focus areas include adv
 
 ## License
 This project is licensed under the MIT License.
-
----
-
-### Caveats
-- **Imports**: Only `audio.nix`, `users.nix`, StreamDB remain (excluded `installer.nix`, `branding.nix`, `desktop.nix`).
-- **Path**: Ensure `modules/ArchibaldVM/flake.nix` exists.
-- **ARM64**: Noted in README (not supported).
-- **Modules**: Verify `audio.nix`, `users.nix` match past work.
-- **DSPs**: Pass TI DSPs via VFIO if needed.
